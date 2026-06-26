@@ -24,6 +24,11 @@ jobs:
         distribution: 'zulu'
         java-version: '17'
 
+    - name: Structure web assets into www folder
+      run: |
+        mkdir www
+        cp index.html www/
+
     - name: Create package.json dynamically
       run: |
         echo '{"name": "dst-sku-hunter", "version": "1.0.0", "dependencies": {"@capacitor/core": "^5.0.0", "@capacitor/android": "^5.0.0"}, "devDependencies": {"@capacitor/cli": "^5.0.0"}}' > package.json
@@ -33,7 +38,7 @@ jobs:
 
     - name: Initialise Capacitor Config
       run: |
-        echo '{"appId": "com.dst.skuhunter", "appName": "DST SKU Hunter", "webDir": ".", "bundledWebRuntime": false}' > capacitor.config.json
+        echo '{"appId": "com.dst.skuhunter", "appName": "DST SKU Hunter", "webDir": "www"}' > capacitor.config.json
 
     - name: Add Android platform
       run: npx cap add android
