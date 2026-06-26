@@ -1,0 +1,1821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>DST SKU Hunter</title>
+
+<!-- SheetJS for Excel import -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Capacitor core + BarcodeScanner plugin (bundled by the Android Studio build) -->
+<!-- These globals are injected at runtime by the Capacitor bridge.             -->
+<!-- <script src="capacitor.js"></script>  ← added automatically by build       -->
+
+<style>
+  /* ===== RESET & BASE ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:        #0A1628;
+    --navy-mid:    #112240;
+    --navy-card:   #1A3356;
+    --navy-border: #1E3F6A;
+    --accent:      #1E90FF;
+    --accent-dim:  #0D4E8A;
+    --accent-glow: rgba(30,144,255,0.18);
+    --green:       #00C97A;
+    --green-dim:   #004D30;
+    --red:         #FF3B5C;
+    --red-dim:     #4A0015;
+    --amber:       #FFB800;
+    --text-primary:   #F0F4FF;
+    --text-secondary: #8AA3C2;
+    --text-muted:     #4A6A8A;
+    --shadow:      0 4px 24px rgba(0,0,0,0.45);
+    --radius-sm:   8px;
+    --radius-md:   14px;
+    --radius-lg:   20px;
+    --tab-h:       64px;
+    --header-h:    60px;
+  }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--navy);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== APP SHELL ===== */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-width: 480px;
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+    background: var(--navy);
+  }
+
+  /* ===== HEADER ===== */
+  #header {
+    height: var(--header-h);
+    background: var(--navy-mid);
+    border-bottom: 1px solid var(--navy-border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 10px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    z-index: 10;
+  }
+
+  .header-logo {
+    height: 28px;
+    width: auto;
+    flex-shrink: 0;
+    object-fit: contain;
+    display: block;
+  }
+
+  .header-title {
+    flex: 1;
+  }
+
+  .header-title h1 {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .header-title p {
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.3px;
+  }
+
+  #item-count-badge {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  /* ===== TAB BAR ===== */
+  #tab-bar {
+    height: var(--tab-h);
+    background: var(--navy-mid);
+    border-top: 1px solid var(--navy-border);
+    display: flex;
+    flex-shrink: 0;
+    z-index: 10;
+    order: 99;
+  }
+
+  .tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    transition: color 0.2s;
+    padding: 8px 0 10px;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+  }
+
+  .tab-btn .tab-icon { font-size: 22px; }
+
+  .tab-btn.active {
+    color: var(--accent);
+  }
+
+  .tab-btn.active::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 0 0 4px 4px;
+  }
+
+  /* ===== SCREEN CONTENT ===== */
+  #screens {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px;
+    display: none;
+  }
+
+  .screen.active { display: block; }
+
+  /* ===== SEARCH BAR ===== */
+  .search-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--navy);
+    padding: 0 0 10px 0;
+    margin: -12px -12px 0 -12px;
+    padding: 10px 12px 10px 12px;
+  }
+
+  .search-inner {
+    display: flex;
+    align-items: center;
+    background: var(--navy-mid);
+    border: 1.5px solid var(--navy-border);
+    border-radius: var(--radius-md);
+    padding: 0 14px;
+    gap: 10px;
+  }
+
+  .search-inner:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  .search-icon { font-size: 16px; color: var(--text-muted); flex-shrink: 0; }
+
+  #search-input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 15px;
+    padding: 13px 0;
+    font-family: inherit;
+  }
+
+  #search-input::placeholder { color: var(--text-muted); }
+
+  #search-clear {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px;
+    display: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ===== STATS STRIP ===== */
+  .stats-strip {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .stat-pill {
+    flex: 1;
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: var(--radius-sm);
+    padding: 8px 6px;
+    text-align: center;
+  }
+
+  .stat-pill .stat-num {
+    font-size: 20px;
+    font-weight: 800;
+    display: block;
+    line-height: 1.1;
+  }
+
+  .stat-pill .stat-lbl {
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .stat-pill.total .stat-num  { color: var(--text-primary); }
+  .stat-pill.scanned .stat-num { color: var(--green); }
+  .stat-pill.pending .stat-num { color: var(--amber); }
+
+  /* ===== FILTER BAR ===== */
+  .filter-bar {
+    display: flex;
+    gap: 7px;
+    margin-bottom: 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .filter-select {
+    flex-shrink: 0;
+    background: var(--navy-mid);
+    border: 1.5px solid var(--navy-border);
+    border-radius: 20px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 7px 10px;
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    max-width: 148px;
+    min-height: 36px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .filter-select.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-glow);
+  }
+  .sort-btn {
+    flex-shrink: 0;
+    background: var(--navy-mid);
+    border: 1.5px solid var(--navy-border);
+    border-radius: 20px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 7px 12px;
+    outline: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    min-height: 36px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .sort-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-glow);
+  }
+  .filter-result-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 0 2px 8px;
+    text-align: right;
+  }
+
+  /* ===== PRODUCT LIST ===== */
+  #product-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .product-card {
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: border-color 0.2s;
+  }
+
+  .product-card.scanned-card {
+    border-color: rgba(0,201,122,0.35);
+    background: linear-gradient(135deg, var(--navy-card) 0%, rgba(0,201,122,0.07) 100%);
+  }
+
+  .card-info { flex: 1; min-width: 0; }
+
+  .card-subcat {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+    margin-bottom: 2px;
+  }
+
+  .card-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-sku {
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sku-badge {
+    background: var(--green-dim);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.5px;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .check-icon { font-size: 14px; color: var(--green); flex-shrink: 0; }
+
+  /* SCAN BUTTON */
+  .btn-scan {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    box-shadow: 0 2px 10px rgba(30,144,255,0.35);
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, transform 0.1s;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .btn-scan:active { background: var(--accent-dim); transform: scale(0.97); }
+
+  .btn-rescan {
+    background: var(--navy-mid);
+    color: var(--text-secondary);
+    border: 1px solid var(--navy-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: background 0.15s;
+  }
+
+  .btn-rescan:active { background: var(--navy-card); }
+
+  /* empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+  }
+
+  .empty-state .empty-icon { font-size: 52px; margin-bottom: 12px; }
+  .empty-state h3 { font-size: 16px; color: var(--text-secondary); margin-bottom: 6px; }
+  .empty-state p  { font-size: 13px; line-height: 1.5; }
+
+  /* ===== SCANNER MODAL ===== */
+  #scanner-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0;
+  }
+
+  #scanner-modal.open { display: flex; }
+
+  .scanner-header {
+    width: 100%;
+    background: var(--navy-mid);
+    border-bottom: 1px solid var(--navy-border);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .scanner-header h2 {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .scanner-product-name {
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #btn-close-scanner {
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    color: var(--red);
+    border-radius: var(--radius-sm);
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #scanner-viewport {
+    width: 100%;
+    max-width: 480px;
+    flex: 1;
+    background: transparent;   /* Native camera renders behind WebView */
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Native BarcodeScanner renders behind the WebView; no in-DOM video element needed. */
+
+  .scanner-guide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .scan-box {
+    width: 240px;
+    height: 140px;
+    border: 2px solid var(--accent);
+    border-radius: 10px;
+    box-shadow: 0 0 0 1000px rgba(0,0,0,0.45);
+  }
+
+  .scan-box::before, .scan-box::after {
+    content: '';
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-color: var(--accent);
+    border-style: solid;
+  }
+
+  .scan-box::before { top: -2px; left: -2px; border-width: 3px 0 0 3px; border-radius: 10px 0 0 0; }
+  .scan-box::after  { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; border-radius: 0 0 10px 0; }
+
+  .scanner-hint {
+    padding: 14px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    background: var(--navy-mid);
+    width: 100%;
+  }
+
+  /* Manual SKU entry in modal */
+  .manual-entry-bar {
+    width: 100%;
+    background: var(--navy);
+    border-top: 1px solid var(--navy-border);
+    padding: 10px 14px;
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  #manual-sku-input {
+    flex: 1;
+    background: var(--navy-mid);
+    border: 1.5px solid var(--navy-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    padding: 11px 12px;
+    font-family: 'Courier New', monospace;
+    outline: none;
+  }
+
+  #manual-sku-input:focus { border-color: var(--accent); }
+
+  #btn-manual-save {
+    background: var(--green);
+    color: #000;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 11px 16px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ===== TAB 2: MANAGE ===== */
+  .section-card {
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .section-card h3 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .section-card h3 .sec-icon { font-size: 16px; }
+
+  /* form elements */
+  .form-group { margin-bottom: 10px; }
+
+  .form-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+  }
+
+  .form-group input, .form-group select {
+    width: 100%;
+    background: var(--navy-mid);
+    border: 1.5px solid var(--navy-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    padding: 12px 14px;
+    font-family: inherit;
+    outline: none;
+    -webkit-appearance: none;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+
+  .form-group input::placeholder { color: var(--text-muted); }
+
+  /* buttons row */
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* generic button styles */
+  .btn {
+    padding: 13px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.15s, transform 0.1s;
+    min-height: 48px;
+    letter-spacing: 0.3px;
+  }
+
+  .btn:active { opacity: 0.8; transform: scale(0.98); }
+
+  .btn-primary   { background: var(--accent); color: #fff; flex: 1; justify-content: center; box-shadow: 0 2px 10px rgba(30,144,255,0.3); }
+  .btn-success   { background: var(--green); color: #000; flex: 1; justify-content: center; }
+  .btn-ghost     { background: var(--navy-mid); color: var(--text-secondary); border: 1px solid var(--navy-border); flex: 1; justify-content: center; }
+  .btn-danger    { background: var(--red); color: #fff; flex: 1; justify-content: center; }
+  .btn-full      { width: 100%; justify-content: center; }
+
+  .file-btn-wrap { position: relative; overflow: hidden; display: inline-flex; flex: 1; }
+  .file-btn-wrap input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    font-size: 100px;
+  }
+
+  /* progress bar for import */
+  #import-progress-wrap {
+    margin-top: 10px;
+    display: none;
+  }
+
+  #import-progress-wrap p { font-size: 12px; color: var(--text-secondary); margin-bottom: 5px; }
+
+  .progress-bar-bg {
+    background: var(--navy-mid);
+    border-radius: 20px;
+    height: 6px;
+    overflow: hidden;
+  }
+
+  #import-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    border-radius: 20px;
+    transition: width 0.3s;
+  }
+
+  /* ===== TOAST ===== */
+  #toast {
+    position: fixed;
+    bottom: calc(var(--tab-h) + 14px);
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    color: var(--text-primary);
+    padding: 11px 20px;
+    border-radius: 30px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.25s, transform 0.25s;
+    z-index: 500;
+    pointer-events: none;
+    max-width: calc(100% - 40px);
+    box-shadow: var(--shadow);
+  }
+
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.success { border-color: var(--green); color: var(--green); }
+  #toast.error   { border-color: var(--red);   color: var(--red); }
+
+  /* ===== CONFIRM MODAL ===== */
+  #confirm-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0,0,0,0.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  #confirm-modal.open { display: flex; }
+
+  .confirm-box {
+    background: var(--navy-card);
+    border: 1px solid var(--navy-border);
+    border-radius: var(--radius-lg);
+    padding: 24px 20px 20px;
+    width: 100%;
+    max-width: 340px;
+    text-align: center;
+  }
+
+  .confirm-box .confirm-icon { font-size: 40px; margin-bottom: 12px; }
+  .confirm-box h3 { font-size: 17px; font-weight: 800; margin-bottom: 8px; }
+  .confirm-box p  { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 20px; }
+  .confirm-btns   { display: flex; gap: 10px; }
+
+  /* ===== SCROLLBAR ===== */
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--navy-border); border-radius: 10px; }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .product-card { animation: slide-in 0.18s ease both; }
+
+  @keyframes pulse-ring {
+    0%   { box-shadow: 0 0 0 0 rgba(30,144,255,0.5); }
+    100% { box-shadow: 0 0 0 14px rgba(30,144,255,0); }
+  }
+
+  .scanning-pulse { animation: pulse-ring 1.1s infinite; }
+
+  /* progress ring */
+  .progress-ring-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 4px;
+    width: 52px;
+    height: 52px;
+  }
+
+  .progress-ring-wrap svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
+  .progress-ring-bg { stroke: var(--navy-border); }
+  .progress-ring-fill { stroke: var(--green); transition: stroke-dashoffset 0.4s; }
+  .progress-ring-text { font-size: 11px; font-weight: 700; color: var(--text-primary); z-index: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <img class="header-logo" src="data:image/png;base64,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" alt="DST Logo" />
+    <div class="header-title">
+      <h1>DST SKU Hunter</h1>
+      <p>Barcode Scan & Track</p>
+    </div>
+    <div id="item-count-badge">0 items</div>
+  </div>
+
+  <!-- SCREENS -->
+  <div id="screens">
+
+    <!-- ===== TAB 1: SEARCH & SCAN ===== -->
+    <div class="screen active" id="screen-scan">
+
+      <div class="search-wrap">
+        <div class="search-inner">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Search by name or sub-category…" autocomplete="off" />
+          <button id="search-clear" onclick="clearSearch()">✕</button>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-strip" id="stats-strip">
+        <div class="stat-pill total">
+          <span class="stat-num" id="stat-total">0</span>
+          <span class="stat-lbl">Total</span>
+        </div>
+        <div class="stat-pill scanned">
+          <span class="stat-num" id="stat-scanned">0</span>
+          <span class="stat-lbl">Scanned</span>
+        </div>
+        <div class="stat-pill pending">
+          <span class="stat-num" id="stat-pending">0</span>
+          <span class="stat-lbl">Pending</span>
+        </div>
+        <div class="stat-pill" style="cursor:pointer" onclick="switchTab('manage')" title="Go to manage">
+          <div class="progress-ring-wrap">
+            <svg width="52" height="52" viewBox="0 0 52 52">
+              <circle class="progress-ring-bg"   cx="26" cy="26" r="21" fill="none" stroke-width="4"/>
+              <circle class="progress-ring-fill" cx="26" cy="26" r="21" fill="none" stroke-width="4"
+                id="progress-ring" stroke-dasharray="131.9" stroke-dashoffset="131.9" stroke-linecap="round"/>
+            </svg>
+            <span class="progress-ring-text" id="progress-pct">0%</span>
+          </div>
+          <span class="stat-lbl">Done</span>
+        </div>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="filter-bar" id="filter-bar">
+        <select class="filter-select" id="filter-sku" onchange="onFilterChange()">
+          <option value="all">All SKU Status</option>
+          <option value="empty">⚠️ SKU Empty</option>
+          <option value="filled">✅ SKU Filled</option>
+        </select>
+        <select class="filter-select" id="filter-subcat" onchange="onFilterChange()">
+          <option value="all">All Sub-Categories</option>
+        </select>
+        <button class="sort-btn" id="sort-btn" onclick="cycleSort()">
+          <span id="sort-icon">↕</span>
+          <span id="sort-label">Name</span>
+        </button>
+      </div>
+      <div class="filter-result-count" id="filter-result-count"></div>
+
+      <div id="product-list"></div>
+    </div>
+
+    <!-- ===== TAB 2: MANAGE ===== -->
+    <div class="screen" id="screen-manage">
+
+      <!-- Manual Add -->
+      <div class="section-card">
+        <h3><span class="sec-icon">➕</span> Add Single Product</h3>
+        <div class="form-group">
+          <label>Sub-Category</label>
+          <input type="text" id="add-subcat" placeholder="e.g. Men's Footwear" />
+        </div>
+        <div class="form-group">
+          <label>Product Name</label>
+          <input type="text" id="add-name" placeholder="e.g. Running Shoe Pro X" />
+        </div>
+        <button class="btn btn-primary btn-full" onclick="addProduct()">
+          ➕ Add to List
+        </button>
+      </div>
+
+      <!-- Import -->
+      <div class="section-card">
+        <h3><span class="sec-icon">📥</span> Import File</h3>
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5;">
+          Supports two formats automatically:<br>
+          <strong style="color:var(--text-primary)">① DST POS Template (.xlsx)</strong> — standard product upload sheet.<br>
+          <strong style="color:var(--text-primary)">② DST Barcode Studio data (.csv)</strong> — existing outlet data with SKUs pre-filled.
+        </p>
+        <div class="btn-row">
+          <div class="file-btn-wrap">
+            <button class="btn btn-ghost">📂 Choose CSV / XLSX</button>
+            <input type="file" id="file-import" accept=".csv,.xlsx,.xls" onchange="handleFileImport(event)" />
+          </div>
+        </div>
+        <div id="import-progress-wrap">
+          <p id="import-status-text">Importing…</p>
+          <div class="progress-bar-bg"><div id="import-progress-bar"></div></div>
+        </div>
+      </div>
+
+      <!-- Export -->
+      <div class="section-card">
+        <h3><span class="sec-icon">📤</span> Export Data</h3>
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5;">
+          Download the full list as a <strong style="color:var(--text-primary)">.csv</strong> file, including all scanned SKUs.
+        </p>
+        <button class="btn btn-success btn-full" onclick="exportCSV()">
+          ⬇️ Download as CSV
+        </button>
+      </div>
+
+      <!-- Clear All -->
+      <div class="section-card" style="border-color:rgba(255,59,92,0.3)">
+        <h3 style="color:var(--red)"><span class="sec-icon">⚠️</span> Danger Zone</h3>
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">
+          Permanently wipe the entire product list. This cannot be undone.
+        </p>
+        <button class="btn btn-danger btn-full" onclick="confirmClearAll()">
+          🗑️ Clear All Products
+        </button>
+      </div>
+
+      <div style="height:8px"></div>
+    </div>
+
+  </div>
+
+  <!-- TAB BAR -->
+  <div id="tab-bar">
+    <button class="tab-btn active" id="tab-scan" onclick="switchTab('scan')">
+      <span class="tab-icon">🔍</span>
+      Search &amp; Scan
+    </button>
+    <button class="tab-btn" id="tab-manage" onclick="switchTab('manage')">
+      <span class="tab-icon">📋</span>
+      Import / Export
+    </button>
+  </div>
+
+</div>
+
+<!-- ===== SCANNER MODAL ===== -->
+<div id="scanner-modal">
+  <div class="scanner-header">
+    <div style="flex:1;min-width:0">
+      <h2>Scan Barcode</h2>
+      <div class="scanner-product-name" id="scanning-product-name">—</div>
+    </div>
+    <button id="btn-close-scanner" onclick="closeScanner()">✕</button>
+  </div>
+
+  <div id="scanner-viewport">
+    <!-- Native BarcodeScanner renders behind the WebView; viewport shows through -->
+    <div class="scanner-guide">
+      <div class="scan-box scanning-pulse"></div>
+    </div>
+  </div>
+
+  <div class="scanner-hint">
+    Aim the barcode at the box above — it will scan automatically.
+  </div>
+
+  <div class="manual-entry-bar">
+    <input type="text" id="manual-sku-input" placeholder="Or type SKU manually…" autocomplete="off" autocapitalize="characters" />
+    <button id="btn-manual-save" onclick="saveManualSKU()">SAVE</button>
+  </div>
+</div>
+
+<!-- ===== CONFIRM MODAL ===== -->
+<div id="confirm-modal">
+  <div class="confirm-box">
+    <div class="confirm-icon">⚠️</div>
+    <h3 id="confirm-title">Are you sure?</h3>
+    <p id="confirm-msg">This action cannot be undone.</p>
+    <div class="confirm-btns">
+      <button class="btn btn-ghost" id="confirm-no">Cancel</button>
+      <button class="btn btn-danger" id="confirm-yes">Delete All</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- AUDIO CONTEXT for beep -->
+<script>
+// ===================================================
+//  DST SKU HUNTER — Main Application Script
+// ===================================================
+
+const STORAGE_KEY = 'dst_sku_hunter_products';
+
+let products = [];          // { id, subcat, name, sku, status }
+let currentScanId = null;   // product id being scanned
+let scannerOpen = false;
+let searchQuery  = '';
+let filterSKU    = 'all';   // 'all' | 'empty' | 'filled'
+let filterSubcat = 'all';   // 'all' | <subcat string>
+let sortMode     = 'none';  // 'none' | 'asc' | 'desc'
+
+// ─── CAPACITOR BARCODE SCANNER HELPERS ─────────────
+// Resolves the BarcodeScanner plugin from the Capacitor bridge.
+// Returns null if running outside of a Capacitor app (e.g. plain browser preview).
+function getPlugin() {
+  try {
+    return Capacitor.Plugins.BarcodeScanner;
+  } catch (e) {
+    return null;
+  }
+}
+
+// ─── INIT ──────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadFromStorage();
+  renderList();
+  updateStats();
+
+  document.getElementById('search-input').addEventListener('input', function() {
+    searchQuery = this.value.trim().toLowerCase();
+    document.getElementById('search-clear').style.display = searchQuery ? 'block' : 'none';
+    renderList();
+  });
+
+  // Populate sub-category dropdown on load
+  refreshSubcatDropdown();
+
+  // Enter on manual add fields
+  ['add-subcat','add-name'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') addProduct();
+    });
+  });
+
+  document.getElementById('manual-sku-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveManualSKU();
+  });
+});
+
+// ─── STORAGE ───────────────────────────────────────
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    products = raw ? JSON.parse(raw) : [];
+    // Data integrity
+    products = products.map(p => ({
+      id:      p.id      || generateId(),
+      subcat:  p.subcat  || '',
+      catname: p.catname || '',
+      name:    p.name    || '',
+      sku:     p.sku     || '',
+      status:  p.status  || 'Pending'
+    }));
+  } catch (e) {
+    console.error('Load error:', e);
+    products = [];
+  }
+}
+
+function saveToStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+  } catch (e) {
+    showToast('⚠️ Storage full — cannot save!', 'error');
+  }
+}
+
+function generateId() {
+  return '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// ─── TABS ──────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + tab).classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+// ─── RENDER LIST ───────────────────────────────────
+function renderList() {
+  const list = document.getElementById('product-list');
+  const q    = searchQuery;
+
+  // 1. Text search
+  let filtered = q
+    ? products.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.subcat.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q))
+    : [...products];
+
+  // 2. SKU status filter
+  if (filterSKU === 'empty')  filtered = filtered.filter(p => !p.sku);
+  if (filterSKU === 'filled') filtered = filtered.filter(p =>  p.sku);
+
+  // 3. Sub-category filter
+  if (filterSubcat !== 'all') {
+    filtered = filtered.filter(p => p.subcat === filterSubcat);
+  }
+
+  // 4. Sort by name
+  if (sortMode === 'asc') {
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
+  } else if (sortMode === 'desc') {
+    filtered.sort((a, b) => b.name.localeCompare(a.name));
+  }
+
+  // Update result count badge
+  const countEl = document.getElementById('filter-result-count');
+  const hasActiveFilter = filterSKU !== 'all' || filterSubcat !== 'all' || q;
+  countEl.textContent = hasActiveFilter
+    ? `Showing ${filtered.length} of ${products.length} products`
+    : '';
+
+  if (filtered.length === 0) {
+    list.innerHTML = products.length === 0
+      ? `<div class="empty-state">
+           <div class="empty-icon">🏷️</div>
+           <h3>No products yet</h3>
+           <p>Go to <strong>Import / Export</strong> tab to add products manually or import a CSV / Excel file.</p>
+         </div>`
+      : `<div class="empty-state">
+           <div class="empty-icon">🔎</div>
+           <h3>No results</h3>
+           <p>Try adjusting your search or filters.</p>
+         </div>`;
+    return;
+  }
+
+  list.innerHTML = '';
+  filtered.forEach((p, idx) => {
+    const scanned = p.status === 'Scanned';
+    const card = document.createElement('div');
+    card.className = 'product-card' + (scanned ? ' scanned-card' : '');
+    card.style.animationDelay = Math.min(idx * 0.03, 0.3) + 's';
+
+    card.innerHTML = `
+      <div class="card-info">
+        <div class="card-subcat">${escHtml(p.subcat) || '—'}</div>
+        <div class="card-name">${escHtml(p.name) || 'Unnamed product'}</div>
+        ${scanned ? `<div class="card-sku">
+          <span class="sku-badge">${escHtml(p.sku)}</span>
+          <span class="check-icon">✅</span>
+        </div>` : ''}
+      </div>
+      ${scanned
+        ? `<button class="btn-rescan" onclick="openScanner('${p.id}')">↩ Re-scan</button>`
+        : `<button class="btn-scan"   onclick="openScanner('${p.id}')">📷 SCAN SKU</button>`
+      }
+    `;
+    list.appendChild(card);
+  });
+}
+
+// ─── FILTER & SORT CONTROLS ────────────────────────
+function onFilterChange() {
+  filterSKU    = document.getElementById('filter-sku').value;
+  filterSubcat = document.getElementById('filter-subcat').value;
+
+  // Toggle active styling on selects
+  const skuEl    = document.getElementById('filter-sku');
+  const subcatEl = document.getElementById('filter-subcat');
+  skuEl.classList.toggle('active',    filterSKU    !== 'all');
+  subcatEl.classList.toggle('active', filterSubcat !== 'all');
+
+  renderList();
+}
+
+// Cycle: none → A→Z → Z→A → none
+function cycleSort() {
+  if (sortMode === 'none') sortMode = 'asc';
+  else if (sortMode === 'asc')  sortMode = 'desc';
+  else sortMode = 'none';
+
+  const btn   = document.getElementById('sort-btn');
+  const icon  = document.getElementById('sort-icon');
+  const label = document.getElementById('sort-label');
+
+  if (sortMode === 'none') {
+    btn.classList.remove('active');
+    icon.textContent  = '↕';
+    label.textContent = 'Name';
+  } else if (sortMode === 'asc') {
+    btn.classList.add('active');
+    icon.textContent  = '↑';
+    label.textContent = 'A → Z';
+  } else {
+    btn.classList.add('active');
+    icon.textContent  = '↓';
+    label.textContent = 'Z → A';
+  }
+
+  renderList();
+}
+
+// Rebuild the sub-category <select> from current product data
+function refreshSubcatDropdown() {
+  const sel = document.getElementById('filter-subcat');
+  const current = sel.value; // preserve selection if possible
+
+  // Collect unique sub-cats, sorted alphabetically
+  const subcats = [...new Set(products.map(p => p.subcat).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+
+  // Rebuild options
+  sel.innerHTML = '<option value="all">All Sub-Categories</option>';
+  subcats.forEach(sc => {
+    const opt = document.createElement('option');
+    opt.value       = sc;
+    opt.textContent = sc;
+    if (sc === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+
+  // If previously selected sub-cat no longer exists, reset
+  if (filterSubcat !== 'all' && !subcats.includes(filterSubcat)) {
+    filterSubcat = 'all';
+    sel.classList.remove('active');
+  }
+}
+
+function updateStats() {
+  const total   = products.length;
+  const scanned = products.filter(p => p.status === 'Scanned').length;
+  const pending = total - scanned;
+  const pct     = total > 0 ? Math.round((scanned / total) * 100) : 0;
+  const circumference = 2 * Math.PI * 21; // r=21
+
+  document.getElementById('stat-total').textContent   = total;
+  document.getElementById('stat-scanned').textContent = scanned;
+  document.getElementById('stat-pending').textContent = pending;
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('item-count-badge').textContent = total + ' item' + (total !== 1 ? 's' : '');
+
+  const ring = document.getElementById('progress-ring');
+  const offset = circumference - (pct / 100) * circumference;
+  ring.style.strokeDasharray  = circumference;
+  ring.style.strokeDashoffset = offset;
+  ring.style.stroke = pct === 100 ? 'var(--green)' : pct > 50 ? 'var(--accent)' : 'var(--amber)';
+}
+
+function clearSearch() {
+  document.getElementById('search-input').value = '';
+  searchQuery = '';
+  document.getElementById('search-clear').style.display = 'none';
+  renderList();
+}
+
+function clearAllFilters() {
+  // Reset search
+  document.getElementById('search-input').value = '';
+  searchQuery = '';
+  document.getElementById('search-clear').style.display = 'none';
+  // Reset SKU filter
+  filterSKU = 'all';
+  document.getElementById('filter-sku').value = 'all';
+  document.getElementById('filter-sku').classList.remove('active');
+  // Reset subcat filter
+  filterSubcat = 'all';
+  document.getElementById('filter-subcat').value = 'all';
+  document.getElementById('filter-subcat').classList.remove('active');
+  renderList();
+}
+
+// ─── ADD PRODUCT ───────────────────────────────────
+function addProduct() {
+  const subcat = document.getElementById('add-subcat').value.trim();
+  const name   = document.getElementById('add-name').value.trim();
+
+  if (!name) { showToast('⚠️ Product name is required', 'error'); return; }
+
+  products.push({ id: generateId(), subcat, catname: '', name, sku: '', status: 'Pending' });
+  saveToStorage();
+  renderList();
+  updateStats();
+
+  document.getElementById('add-subcat').value = '';
+  document.getElementById('add-name').value   = '';
+  refreshSubcatDropdown();
+  showToast('✅ Product added', 'success');
+}
+
+// ─── SCANNER (Capacitor BarcodeScanner) ────────────
+async function openScanner(productId) {
+  currentScanId = productId;
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+
+  document.getElementById('scanning-product-name').textContent = p.name;
+  document.getElementById('manual-sku-input').value = '';
+  document.getElementById('scanner-modal').classList.add('open');
+
+  const plugin = getPlugin();
+  if (!plugin) {
+    // Running in plain browser — camera unavailable; user can still type manually.
+    showToast('📷 Native scanner unavailable — use manual entry', 'error');
+    return;
+  }
+
+  // 1. Request camera permission if not already granted.
+  const status = await plugin.checkPermission({ force: true });
+  if (!status.granted) {
+    showToast('📷 Camera permission denied — use manual entry below', 'error');
+    return;
+  }
+
+  // 2. Make the WebView background transparent so the native camera preview
+  //    shows through the #scanner-viewport area.
+  plugin.hideBackground();
+  document.getElementById('app').style.background = 'transparent';
+  document.getElementById('scanner-modal').style.background = 'transparent';
+
+  scannerOpen = true;
+
+  // 3. Start the scan — this returns once a barcode is detected (or throws).
+  try {
+    const result = await plugin.startScan();
+    if (result.hasContent) {
+      onScanSuccess(result.content);
+    } else {
+      // User cancelled without scanning anything.
+      closeScanner();
+    }
+  } catch (err) {
+    console.warn('BarcodeScanner error:', err);
+    showToast('📷 Scan failed — use manual entry below', 'error');
+    closeScanner();
+  }
+}
+
+function onScanSuccess(sku) {
+  saveSKU(sku);
+  playBeep();
+}
+
+function saveManualSKU() {
+  const val = document.getElementById('manual-sku-input').value.trim();
+  if (!val) { showToast('⚠️ Please enter a SKU', 'error'); return; }
+  saveSKU(val);
+}
+
+function saveSKU(sku) {
+  const idx = products.findIndex(p => p.id === currentScanId);
+  if (idx === -1) { closeScanner(); return; }
+
+  products[idx].sku    = sku.trim();
+  products[idx].status = 'Scanned';
+
+  saveToStorage();
+  closeScanner();
+  renderList();
+  updateStats();
+  showToast('✅ SKU saved: ' + sku, 'success');
+}
+
+function closeScanner() {
+  const plugin = getPlugin();
+
+  // Stop the native scan session (safe to call even if scan already finished).
+  if (plugin && scannerOpen) {
+    plugin.stopScan().catch(() => {});
+    // Restore opaque backgrounds.
+    plugin.showBackground();
+    document.getElementById('app').style.background = '';
+    document.getElementById('scanner-modal').style.background = '';
+  }
+
+  scannerOpen = false;
+  currentScanId = null;
+  document.getElementById('scanner-modal').classList.remove('open');
+}
+
+// ─── BEEP ──────────────────────────────────────────
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.18);
+  } catch(e) { /* silent fallback */ }
+}
+
+// ─── IMPORT ────────────────────────────────────────
+function handleFileImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  const wrap = document.getElementById('import-progress-wrap');
+  const bar  = document.getElementById('import-progress-bar');
+  const txt  = document.getElementById('import-status-text');
+
+  wrap.style.display = 'block';
+  bar.style.width    = '0%';
+  bar.style.background = 'var(--accent)'; // reset colour in case prior import errored
+  txt.textContent    = 'Reading file…';
+
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    try {
+      bar.style.width = '40%';
+      let imported = [];
+
+      if (ext === 'csv') {
+        imported = parseKBMcsv(e.target.result);
+      } else if (['xlsx','xls'].includes(ext)) {
+        const data = new Uint8Array(e.target.result);
+        const wb   = XLSX.read(data, { type: 'array' });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        imported   = parseKBMxlsx(ws);
+      }
+
+      bar.style.width = '70%';
+      txt.textContent = 'Saving products…';
+
+      let added   = 0;
+      let skipped = 0;
+      let updated = 0;
+
+      imported.forEach(item => {
+        if (!item.name) { skipped++; return; }
+
+        // If a matching product already exists (same name + subcat), update its SKU
+        const existingIdx = products.findIndex(p =>
+          p.name.toLowerCase()   === item.name.toLowerCase() &&
+          p.subcat.toLowerCase() === item.subcat.toLowerCase()
+        );
+
+        if (existingIdx !== -1) {
+          // Only overwrite SKU if the import has one and the slot is still empty
+          if (item.sku && !products[existingIdx].sku) {
+            products[existingIdx].sku    = item.sku;
+            products[existingIdx].status = 'Scanned';
+            updated++;
+          } else {
+            skipped++;
+          }
+        } else {
+          products.push({
+            id:      generateId(),
+            subcat:  item.subcat,
+            catname: item.catname || '',
+            name:    item.name,
+            sku:     item.sku,
+            status:  item.sku ? 'Scanned' : 'Pending'
+          });
+          added++;
+        }
+      });
+
+      saveToStorage();
+      bar.style.width = '100%';
+
+      let summary = `Done! Added ${added}`;
+      if (updated) summary += `, updated ${updated} SKU${updated !== 1 ? 's' : ''}`;
+      if (skipped) summary += `, skipped ${skipped}`;
+      txt.textContent = summary + '.';
+
+      refreshSubcatDropdown();
+      renderList();
+      updateStats();
+      showToast(`📥 Imported ${added + updated} products`, 'success');
+      setTimeout(() => { wrap.style.display = 'none'; }, 3500);
+
+    } catch (err) {
+      bar.style.width    = '100%';
+      bar.style.background = 'var(--red)';
+      txt.textContent    = '❌ Import failed: ' + err.message;
+      showToast('❌ Import error', 'error');
+      console.error(err);
+    }
+
+    event.target.value = '';
+  };
+
+  reader.onerror = () => {
+    showToast('❌ Could not read file', 'error');
+    event.target.value = '';
+  };
+
+  if (ext === 'csv') {
+    reader.readAsText(file);
+  } else {
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+// ─── PARSER: KBM Bulk Template XLSX ────────────────
+// Row 1 = header (Product Name, …, Sub Category, …, SKU …)
+// Row 2 = type hints  → skip
+// Row 3+ = data: col[0]=Product Name, col[3]=Sub Category, col[6]=SKU
+function parseKBMxlsx(ws) {
+  const allRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+  const results = [];
+
+  // Detect column indices from the header row (row 0)
+  const header = (allRows[0] || []).map(c => String(c || '').toLowerCase().trim());
+  let colName    = header.findIndex(h => h.includes('product name'));
+  let colCatMain = header.findIndex(h => h.includes('main category') || h === 'categoryname');
+  let colSubcat  = header.findIndex(h => h.includes('sub category') || h.includes('sub-category') || h === 'subcategoryname');
+  let colSKU     = header.findIndex(h => h === 'sku');
+
+  // Fallback to known fixed positions if headers not found
+  if (colName    < 0) colName    = 0;
+  if (colCatMain < 0) colCatMain = 2;
+  if (colSubcat  < 0) colSubcat  = 3;
+  if (colSKU     < 0) colSKU     = 6;
+
+  // Start at row index 2 (row 3 in spreadsheet) — skip header + type-hint rows
+  for (let i = 2; i < allRows.length; i++) {
+    const row  = allRows[i];
+    const name = String(row[colName]   || '').trim();
+    if (!name) continue;
+    results.push({
+      name:    name,
+      subcat:  String(row[colSubcat]  || '').trim(),
+      catname: String(row[colCatMain] || '').trim(),
+      sku:     String(row[colSKU]     || '').trim()
+    });
+  }
+  return results;
+}
+
+// ─── PARSER: DST POS Export CSV ────────────────────
+// Multi-row-type format:
+//   SETTING row    → config, skip
+//   CATEGORY row   → sets current category name
+//   SUB_CATEGORY   → sets current sub-category name
+//   PRODUCT rows   → actual items (Type col may be blank for continuation rows)
+//
+// Columns: [Type, GlobalPrefix, CategoryName, SubCategoryName, ProductName, Price, FullSKU, SerialNumber, …]
+// Index:      0        1              2               3              4          5       6          7
+function parseKBMcsv(text) {
+  const rows    = splitCSV(text);
+  const results = [];
+
+  if (rows.length === 0) return results;
+
+  // Detect if this is the DST POS format by checking header row
+  const headerRow = rows[0].map(c => c.toLowerCase().trim());
+  const isDSTFormat = headerRow.some(h => h === 'type' || h === 'fullsku' || h === 'subcategoryname');
+
+  if (isDSTFormat) {
+    // Find column indices from header
+    const colType    = headerRow.indexOf('type');
+    const colCatName = headerRow.indexOf('categoryname');
+    const colSubcat  = headerRow.indexOf('subcategoryname');
+    const colName    = headerRow.indexOf('productname');
+    const colSKU     = headerRow.indexOf('fullsku');
+
+    for (let i = 1; i < rows.length; i++) {
+      const row  = rows[i];
+      const type = String(row[colType] || '').trim().toUpperCase();
+
+      // Only process PRODUCT rows — skip SETTING, CATEGORY, SUB_CATEGORY
+      if (type !== 'PRODUCT') continue;
+
+      const name = String(row[colName] || '').trim();
+      if (!name) continue;
+
+      results.push({
+        name:    name,
+        subcat:  String(row[colSubcat]  || '').trim(),
+        catname: String(row[colCatName] || '').trim(),
+        sku:     String(row[colSKU]     || '').trim()
+      });
+    }
+  } else {
+    // Generic CSV fallback: col[0]=Sub-Category, col[1]=Product Name, col[2]=SKU
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      // Skip obvious header rows
+      if (i === 0) {
+        const first = String(row[0] || '').toLowerCase();
+        if (first.includes('sub') || first.includes('cat') || first === 'name' || first === 'product') continue;
+      }
+      const name = String(row[1] || row[0] || '').trim();
+      if (!name) continue;
+      results.push({
+        subcat:  String(row[0] || '').trim(),
+        catname: '',
+        name:    name,
+        sku:     String(row[2] || '').trim()
+      });
+    }
+  }
+
+  return results;
+}
+
+// RFC-4180-compliant CSV splitter — handles quoted fields with embedded commas/newlines
+function splitCSV(text) {
+  const rows = [];
+  const lines = text.split(/\r?\n/);
+  let currentRow = [];
+  let cur = '';
+  let inQ = false;
+
+  function pushRow() {
+    if (currentRow.length > 0 || cur.trim()) {
+      currentRow.push(cur.trim());
+      rows.push(currentRow);
+    }
+    currentRow = [];
+    cur = '';
+  }
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQ && line[i + 1] === '"') { cur += '"'; i++; } // escaped quote
+        else inQ = !inQ;
+      } else if (ch === ',' && !inQ) {
+        currentRow.push(cur.trim());
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    if (!inQ) {
+      pushRow();
+    } else {
+      cur += '\n'; // newline inside quoted field
+    }
+  }
+  if (cur.trim() || currentRow.length) pushRow();
+  return rows;
+}
+
+// ─── EXPORT ────────────────────────────────────────
+function exportCSV() {
+  if (products.length === 0) {
+    showToast('⚠️ No products to export', 'error');
+    return;
+  }
+
+  // ── Build DST Barcode Studio CSV format ──────────────
+  // Header row
+  const lines = ['Type,GlobalPrefix,CategoryName,SubCategoryName,ProductName,Price,FullSKU,SerialNumber,DeletedAt,ItemType'];
+
+  // SETTING row
+  lines.push('SETTING,,{"outletCode":"1","serialDigits":5},,,,,,, ');
+
+  // Collect unique categories and sub-categories from products
+  // catname may be empty for manually-added products — fall back to subcat as both
+  const catMap = new Map(); // catname → Set of subcats
+  products.forEach(p => {
+    const cat    = p.catname || p.subcat || 'Uncategorized';
+    const subcat = p.subcat  || 'Uncategorized';
+    if (!catMap.has(cat)) catMap.set(cat, new Set());
+    catMap.get(cat).add(subcat);
+  });
+
+  // Emit CATEGORY + SUB_CATEGORY rows, assigning sequential IDs
+  let subcatIdCounter = 1;
+  const subcatIdMap = new Map(); // "cat|subcat" → id string
+  catMap.forEach((subcats, cat) => {
+    lines.push(`CATEGORY,,${csvEscape(cat)},,,,,,, `);
+    subcats.forEach(subcat => {
+      const id = String(subcatIdCounter++);
+      subcatIdMap.set(`${cat}|${subcat}`, id);
+      lines.push(`SUB_CATEGORY,,${csvEscape(cat)},${csvEscape(subcat)},${id},,,,, `);
+    });
+  });
+
+  // Emit PRODUCT rows
+  products.forEach(p => {
+    const cat    = p.catname || p.subcat || 'Uncategorized';
+    const subcat = p.subcat  || 'Uncategorized';
+    // ProductName is always quoted per the format
+    const namePart = '"' + (p.name || '').replace(/"/g, '""') + '"';
+    const skuPart  = p.sku || '';
+    // SerialNumber: last 5 chars of SKU (mirrors the source format)
+    const serial   = skuPart ? skuPart.slice(-5) : '';
+    lines.push(`PRODUCT,,${csvEscape(cat)},${csvEscape(subcat)},${namePart},,${skuPart},${serial},,`);
+  });
+
+  const csvContent = lines.join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const now  = new Date();
+  const ts   = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+
+  a.href     = url;
+  a.download = `DST_BarcodeStudio_${ts}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast(`📤 Exported ${products.length} products`, 'success');
+}
+
+function csvEscape(val) {
+  const s = String(val || '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+// ─── CLEAR ALL ─────────────────────────────────────
+function confirmClearAll() {
+  openConfirm(
+    'Clear All Products?',
+    'This will permanently delete all ' + products.length + ' product(s). This cannot be undone.',
+    () => {
+      products = [];
+      filterSKU    = 'all';
+      filterSubcat = 'all';
+      sortMode     = 'none';
+      saveToStorage();
+      refreshSubcatDropdown();
+      renderList();
+      updateStats();
+      // Reset filter UI
+      document.getElementById('filter-sku').value = 'all';
+      document.getElementById('filter-sku').classList.remove('active');
+      document.getElementById('filter-subcat').classList.remove('active');
+      const sortBtn = document.getElementById('sort-btn');
+      sortBtn.classList.remove('active');
+      document.getElementById('sort-icon').textContent  = '↕';
+      document.getElementById('sort-label').textContent = 'Name';
+      showToast('🗑️ All products cleared', 'success');
+    }
+  );
+}
+
+// ─── CONFIRM MODAL ─────────────────────────────────
+let confirmCallback = null;
+
+function openConfirm(title, msg, onYes) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-msg').textContent   = msg;
+  document.getElementById('confirm-modal').classList.add('open');
+  confirmCallback = onYes;
+}
+
+document.getElementById('confirm-yes').addEventListener('click', () => {
+  document.getElementById('confirm-modal').classList.remove('open');
+  if (confirmCallback) confirmCallback();
+  confirmCallback = null;
+});
+
+document.getElementById('confirm-no').addEventListener('click', () => {
+  document.getElementById('confirm-modal').classList.remove('open');
+  confirmCallback = null;
+});
+
+// ─── TOAST ─────────────────────────────────────────
+let toastTimer = null;
+
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent  = msg;
+  el.className    = 'show' + (type ? ' ' + type : '');
+
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    el.className = '';
+  }, 2800);
+}
+
+// ─── UTILS ─────────────────────────────────────────
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// Close scanner if user presses back / taps overlay
+document.getElementById('scanner-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeScanner();
+});
+
+document.getElementById('confirm-modal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    this.classList.remove('open');
+    confirmCallback = null;
+  }
+});
+
+// Prevent double-tap zoom
+document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+</script>
+</body>
+</html>
